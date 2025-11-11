@@ -142,6 +142,11 @@ extern volatile int ZirconModuleAnchorSource;
 [[maybe_unused]] static int ZirconModuleAnchorDestination =
     ZirconModuleAnchorSource;
 
+// This anchor is used to force the linker to link the BihlerModule.
+extern volatile int BihlerModuleAnchorSource;
+[[maybe_unused]] static int BihlerModuleAnchorDestination =
+    BihlerModuleAnchorSource;
+
 } // namespace clang::tidy
 
 #endif
