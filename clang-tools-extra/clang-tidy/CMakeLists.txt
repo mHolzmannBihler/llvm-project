@@ -77,6 +77,7 @@ add_subdirectory(performance)
 add_subdirectory(portability)
 add_subdirectory(readability)
 add_subdirectory(zircon)
+add_subdirectory(bihler)
 set(ALL_CLANG_TIDY_CHECKS
   clangTidyAndroidModule
   clangTidyAbseilModule
@@ -101,6 +102,7 @@ set(ALL_CLANG_TIDY_CHECKS
   clangTidyPortabilityModule
   clangTidyReadabilityModule
   clangTidyZirconModule
+  clangTidyBihlerModule
   )
 
 if(CLANG_TIDY_ENABLE_QUERY_BASED_CUSTOM_CHECKS)
