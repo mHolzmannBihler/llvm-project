@@ -30,6 +30,8 @@
 
 # Nested build directory
 /build*
+# But allow Bihler build script
+!build_bihler_module.bat
 
 #==============================================================================#
 # Explicit files to ignore (only matches one).
