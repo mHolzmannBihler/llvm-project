@@ -33,6 +33,7 @@ public:
 private:
   bool isNothrowNew(const CXXNewExpr *NewExpr);
   bool isBihlListMethod(const CXXMethodDecl *Method);
+  bool isBihlOptionalMethod(const CXXMethodDecl *Method);
   bool isResultCheckedForNullptr(const CXXMemberCallExpr *CallExpr,
                                   const ast_matchers::MatchFinder::MatchResult &Result);
 };

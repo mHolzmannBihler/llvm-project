@@ -80,6 +80,15 @@ void BihlerUnsafeAllocationCheck::registerMatchers(MatchFinder *Finder) {
       ))
     ).bind("bihllist_emplace"), this);
 
+  // Match BihlOptional::emplace and ::create specifically
+  Finder->addMatcher(
+    cxxMemberCallExpr(
+      callee(cxxMethodDecl(
+        anyOf(hasName("emplace"), hasName("create")),
+        hasAncestor(namespaceDecl(hasName("BihlOptional")))
+      ))
+    ).bind("bihloptional_call"), this);
+
   // Match map/unordered_map operator[] which may allocate
   Finder->addMatcher(
     cxxOperatorCallExpr(
@@ -123,10 +132,25 @@ void BihlerUnsafeAllocationCheck::check(const MatchFinder::MatchResult &Result) 
       diag(BihlListCall->getBeginLoc(),
            "BihlList::List::emplace_back return value must be checked for nullptr");
     }
+  } else if (const auto *BihlOptionalCall = Result.Nodes.getNodeAs<CXXMemberCallExpr>("bihloptional_call")) {
+    // BihlOptional::emplace and ::create use std::nothrow internally
+    // Check if the return value is checked for nullptr
+    if (!isResultCheckedForNullptr(BihlOptionalCall, Result)) {
+      std::string MethodName = "unknown";
+      if (const auto *Method = BihlOptionalCall->getMethodDecl()) {
+        MethodName = Method->getNameAsString();
+      }
+      diag(BihlOptionalCall->getBeginLoc(),
+           "BihlOptional::" + MethodName + " return value must be checked for nullptr");
+    }
   } else if (const auto *STLCall = Result.Nodes.getNodeAs<CXXMemberCallExpr>("unsafe_stl")) {
     // Skip BihlList methods - they use nothrow internally
     if (const auto *Method = STLCall->getMethodDecl()) {
       if (isBihlListMethod(Method)) {
+        return;
+      }
+      // Skip BihlOptional methods - they use nothrow internally
+      if (isBihlOptionalMethod(Method)) {
         return;
       }
       std::string MethodName = Method->getNameAsString();
@@ -187,6 +211,24 @@ bool BihlerUnsafeAllocationCheck::isBihlListMethod(const CXXMethodDecl *Method) 
   // Check if the class is BihlList::List
   std::string ClassName = ParentClass->getQualifiedNameAsString();
   return ClassName.find("BihlList::List") != std::string::npos;
+}
+
+bool BihlerUnsafeAllocationCheck::isBihlOptionalMethod(const CXXMethodDecl *Method) {
+  if (!Method)
+    return false;
+
+  const auto *ParentClass = Method->getParent();
+  if (!ParentClass)
+    return false;
+
+  // Check if the class is BihlOptional
+  std::string ClassName = ParentClass->getQualifiedNameAsString();
+  if (ClassName.find("BihlOptional") == std::string::npos)
+    return false;
+
+  // Check if method is emplace or create
+  StringRef MethodName = Method->getName();
+  return MethodName == "emplace" || MethodName == "create";
 }
 
 bool BihlerUnsafeAllocationCheck::isResultCheckedForNullptr(
