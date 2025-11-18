@@ -12,6 +12,10 @@
 #include "../ClangTidyCheck.h"
 
 namespace clang {
+class CXXMethodDecl;
+class CXXMemberCallExpr;
+class CXXNewExpr;
+
 namespace tidy {
 namespace bihler {
 
@@ -28,6 +32,9 @@ public:
 
 private:
   bool isNothrowNew(const CXXNewExpr *NewExpr);
+  bool isBihlListMethod(const CXXMethodDecl *Method);
+  bool isResultCheckedForNullptr(const CXXMemberCallExpr *CallExpr,
+                                  const ast_matchers::MatchFinder::MatchResult &Result);
 };
 
 } // namespace bihler
