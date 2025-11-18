@@ -9,6 +9,11 @@
 #include "BihlerUnsafeAllocationCheck.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ParentMapContext.h"
+#include "clang/AST/Stmt.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/ExprCXX.h"
+#include "clang/AST/Decl.h"
+#include "clang/AST/DeclCXX.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 
@@ -66,6 +71,15 @@ void BihlerUnsafeAllocationCheck::registerMatchers(MatchFinder *Finder) {
       ))
     ).bind("unsafe_stl"), this);
 
+  // Match BihlList::List::emplace_back specifically
+  Finder->addMatcher(
+    cxxMemberCallExpr(
+      callee(cxxMethodDecl(
+        hasName("emplace_back"),
+        ofClass(hasName("BihlList::List"))
+      ))
+    ).bind("bihllist_emplace"), this);
+
   // Match map/unordered_map operator[] which may allocate
   Finder->addMatcher(
     cxxOperatorCallExpr(
@@ -102,14 +116,24 @@ void BihlerUnsafeAllocationCheck::check(const MatchFinder::MatchResult &Result) 
     
     diag(NewExpr->getBeginLoc(), 
          "new expression is not protected by try-catch block and may throw std::bad_alloc");
-  } else if (const auto *STLCall = Result.Nodes.getNodeAs<CXXMemberCallExpr>("unsafe_stl")) {
-    std::string MethodName = "STL container method";
-    if (const auto *Method = STLCall->getMethodDecl()) {
-      MethodName = Method->getNameAsString();
+  } else if (const auto *BihlListCall = Result.Nodes.getNodeAs<CXXMemberCallExpr>("bihllist_emplace")) {
+    // BihlList::List::emplace_back uses std::nothrow internally
+    // Check if the return value is checked for nullptr
+    if (!isResultCheckedForNullptr(BihlListCall, Result)) {
+      diag(BihlListCall->getBeginLoc(),
+           "BihlList::List::emplace_back return value must be checked for nullptr");
     }
-    diag(STLCall->getBeginLoc(), 
-         "STL method '%0' is not protected by try-catch block and may throw std::bad_alloc")
-        << MethodName;
+  } else if (const auto *STLCall = Result.Nodes.getNodeAs<CXXMemberCallExpr>("unsafe_stl")) {
+    // Skip BihlList methods - they use nothrow internally
+    if (const auto *Method = STLCall->getMethodDecl()) {
+      if (isBihlListMethod(Method)) {
+        return;
+      }
+      std::string MethodName = Method->getNameAsString();
+      diag(STLCall->getBeginLoc(), 
+           "STL method '%0' is not protected by try-catch block and may throw std::bad_alloc")
+          << MethodName;
+    }
   } else if (const auto *MapSubscript = Result.Nodes.getNodeAs<CXXOperatorCallExpr>("unsafe_map_subscript")) {
     diag(MapSubscript->getBeginLoc(),
          "map subscript operator[] is not protected by try-catch block and may throw std::bad_alloc");
@@ -150,6 +174,88 @@ bool BihlerUnsafeAllocationCheck::isNothrowNew(const CXXNewExpr *NewExpr) {
   }
   
   return false;
+}
+
+bool BihlerUnsafeAllocationCheck::isBihlListMethod(const CXXMethodDecl *Method) {
+  if (!Method)
+    return false;
+
+  const auto *ParentClass = Method->getParent();
+  if (!ParentClass)
+    return false;
+
+  // Check if the class is BihlList::List
+  std::string ClassName = ParentClass->getQualifiedNameAsString();
+  return ClassName.find("BihlList::List") != std::string::npos;
+}
+
+bool BihlerUnsafeAllocationCheck::isResultCheckedForNullptr(
+    const CXXMemberCallExpr *CallExpr,
+    const MatchFinder::MatchResult &Result) {
+  
+  ASTContext *Context = Result.Context;
+  
+  // Helper to recursively check parent nodes
+  std::function<bool(const Stmt *)> checkParentForNullptrCheck;
+  checkParentForNullptrCheck = [&](const Stmt *S) -> bool {
+    auto Parents = Context->getParents(*S);
+    for (const auto &Parent : Parents) {
+      // Direct parent is VarDecl - the result is assigned
+      if (Parent.get<clang::VarDecl>()) {
+        // If assigned to variable, assume it will be checked
+        return true;
+      }
+      
+      // Parent is IfStmt condition
+      if (Parent.get<clang::IfStmt>()) {
+        return true;
+      }
+      
+      // Parent is binary operator with nullptr comparison
+      if (const auto *BinOp = Parent.get<BinaryOperator>()) {
+        if (BinOp->getOpcode() == BO_NE || BinOp->getOpcode() == BO_EQ) {
+          const Expr *LHS = BinOp->getLHS()->IgnoreImpCasts();
+          const Expr *RHS = BinOp->getRHS()->IgnoreImpCasts();
+          if (isa<CXXNullPtrLiteralExpr>(LHS) || isa<CXXNullPtrLiteralExpr>(RHS)) {
+            return true;
+          }
+        }
+        // Continue checking parent of BinOp
+        if (checkParentForNullptrCheck(BinOp))
+          return true;
+      }
+      
+      // Parent is unary NOT operator - continue checking
+      if (const auto *UnaryOp = Parent.get<UnaryOperator>()) {
+        if (UnaryOp->getOpcode() == UO_LNot) {
+          // Recursively check parent of UnaryOp
+          if (checkParentForNullptrCheck(UnaryOp))
+            return true;
+        }
+      }
+      
+      // Parent is ImplicitCastExpr - check its parent recursively
+      if (const auto *Cast = Parent.get<ImplicitCastExpr>()) {
+        if (checkParentForNullptrCheck(Cast))
+          return true;
+      }
+      
+      // Parent is MaterializeTemporaryExpr - check its parent recursively
+      if (const auto *Materialize = Parent.get<MaterializeTemporaryExpr>()) {
+        if (checkParentForNullptrCheck(Materialize))
+          return true;
+      }
+      
+      // Parent is ExprWithCleanups - check its parent recursively
+      if (const auto *Cleanup = Parent.get<ExprWithCleanups>()) {
+        if (checkParentForNullptrCheck(Cleanup))
+          return true;
+      }
+    }
+    return false;
+  };
+  
+  return checkParentForNullptrCheck(CallExpr);
 }
 
 } // namespace bihler
