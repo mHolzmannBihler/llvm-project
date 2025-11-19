@@ -280,6 +280,10 @@ bool BihlerUnsafeAllocationCheck::isResultCheckedForNullptr(
             return true;
           }
         }
+        // If it's an assignment, assume the variable will be checked later
+        if (BinOp->getOpcode() == BO_Assign) {
+          return true;
+        }
         // Continue checking parent of BinOp
         if (checkParentForNullptrCheck(BinOp))
           return true;
