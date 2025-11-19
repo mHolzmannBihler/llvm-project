@@ -85,7 +85,10 @@ void BihlerUnsafeAllocationCheck::registerMatchers(MatchFinder *Finder) {
     cxxMemberCallExpr(
       callee(cxxMethodDecl(
         anyOf(hasName("emplace"), hasName("create")),
-        hasAncestor(namespaceDecl(hasName("BihlOptional")))
+        anyOf(
+          hasAncestor(namespaceDecl(hasName("BihlOptional"))),
+          ofClass(hasName("Optional"))
+        )
       ))
     ).bind("bihloptional_call"), this);
 
@@ -226,7 +229,7 @@ bool BihlerUnsafeAllocationCheck::isBihlOptionalMethod(const CXXMethodDecl *Meth
   if (MethodName != "emplace" && MethodName != "create")
     return false;
 
-  // Check if the class is in BihlOptional namespace or class name contains BihlOptional
+  // Check if the class is in BihlOptional namespace or class name contains BihlOptional or Optional
   std::string ClassName = ParentClass->getQualifiedNameAsString();
   
   // Check for BihlOptional in class name
@@ -235,6 +238,12 @@ bool BihlerUnsafeAllocationCheck::isBihlOptionalMethod(const CXXMethodDecl *Meth
   
   // Check for Bihler namespace (less specific but safer)
   if (ClassName.find("Bihler") != std::string::npos)
+    return true;
+  
+  // Also check for "Optional" class name (our custom template class)
+  // This catches cases where the namespace might be different
+  std::string SimpleClassName = ParentClass->getNameAsString();
+  if (SimpleClassName.find("Optional") != std::string::npos)
     return true;
     
   return false;
