@@ -221,14 +221,23 @@ bool BihlerUnsafeAllocationCheck::isBihlOptionalMethod(const CXXMethodDecl *Meth
   if (!ParentClass)
     return false;
 
-  // Check if the class is BihlOptional
-  std::string ClassName = ParentClass->getQualifiedNameAsString();
-  if (ClassName.find("BihlOptional") == std::string::npos)
-    return false;
-
   // Check if method is emplace or create
   StringRef MethodName = Method->getName();
-  return MethodName == "emplace" || MethodName == "create";
+  if (MethodName != "emplace" && MethodName != "create")
+    return false;
+
+  // Check if the class is in BihlOptional namespace or class name contains BihlOptional
+  std::string ClassName = ParentClass->getQualifiedNameAsString();
+  
+  // Check for BihlOptional in class name
+  if (ClassName.find("BihlOptional") != std::string::npos)
+    return true;
+  
+  // Check for Bihler namespace (less specific but safer)
+  if (ClassName.find("Bihler") != std::string::npos)
+    return true;
+    
+  return false;
 }
 
 bool BihlerUnsafeAllocationCheck::isResultCheckedForNullptr(
