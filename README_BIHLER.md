@@ -125,7 +125,15 @@ git fetch origin --prune
 git switch -c release/llvmorg-22.2.0-bihler llvmorg-22.2.0
 ```
 
-3. Bihler-Commits übernehmen (in Reihenfolge):
+3. Bihler-Commits übernehmen:
+
+Einfache Standard-Variante mit Patch-Branch (`bihler-patches`):
+
+```powershell
+git cherry-pick llvmorg-22.1.0..bihler-patches
+```
+
+Alternative (falls kein Patch-Branch genutzt wird):
 
 ```powershell
 git cherry-pick <first-bihler-commit>^..<last-bihler-commit>
@@ -156,9 +164,9 @@ Warum dieser Weg stabil ist:
 - `release/llvmorg-<version>-bihler`: pro Release ein sauberer Arbeitsbranch
 - Alte temporäre Backport-Branches nach Merge löschen
 
-Optional für noch weniger Aufwand:
-- Einen dedizierten Patch-Branch pflegen (nur Bihler-Änderungen)
-- Pro Release diesen Patch-Stand auf neuen Tag cherry-picken
+Einfache Praxis:
+- `bihler-patches`: langlebiger Branch nur mit Bihler-Änderungen
+- Pro neuem Release: `git cherry-pick <previous-release-tag>..bihler-patches`
 
 ---
 
