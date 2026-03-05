@@ -507,7 +507,43 @@ Detailed implementation will follow once validation of the unmodified build is c
 4. Proceed to custom check implementation (future step).
 
 ---
-## 10. License & Upstream
+## 10. Update Process for New clang-tidy Release
+Use this workflow for every new upstream release tag (example: `llvmorg-22.2.0`).
+
+1. Update references:
+```
+git fetch upstream --tags --prune
+git fetch origin --prune
+```
+
+2. Create a clean release branch from the new tag:
+```
+git switch -c release/llvmorg-22.2.0-bihler llvmorg-22.2.0
+```
+
+3. Reapply your Bihler commits (from your known patch range or patch branch):
+```
+git cherry-pick <first-bihler-commit>^..<last-bihler-commit>
+```
+
+4. Build and validate:
+```
+cd ..
+build_bihler_module.bat
+```
+
+5. Publish the release branch:
+```
+cd llvm-project
+git push -u origin release/llvmorg-22.2.0-bihler
+```
+
+6. Keep `main` as integration history, but do release work on dedicated `release/*-bihler` branches.
+
+Practical note: upstream release tags do not automatically contain your fork changes, even if they exist in `main`.
+
+---
+## 11. License & Upstream
 Stick to upstream `llvm-project` structure to simplify rebasing. Keep custom checks isolated under your own module directory.
 
 ---
