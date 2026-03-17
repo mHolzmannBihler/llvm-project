@@ -117,6 +117,20 @@ void BihlerUnsafeAllocationCheck::registerMatchers(MatchFinder *Finder) {
         hasName("allocate_shared")
       )))
     ).bind("unsafe_smart_ptr"), this);
+
+  Finder->addMatcher(
+    callExpr(
+      unless(hasAncestor(cxxTryStmt())),
+      callee(cxxMethodDecl(
+        anyOf(
+          hasName("malloc"),
+          hasName("NovElementResize")
+        ),
+        ofClass(cxxRecordDecl(anyOf(
+            hasName("BihlHeap"),
+            hasName("BihlNovheap"))))
+      ))
+    ).bind("unsafe_bihlheap_throwing_method"), this);
 }
 
 void BihlerUnsafeAllocationCheck::check(const MatchFinder::MatchResult &Result) {
@@ -172,6 +186,20 @@ void BihlerUnsafeAllocationCheck::check(const MatchFinder::MatchResult &Result) 
     diag(SmartPtrCall->getBeginLoc(), 
          "smart pointer factory '%0' is not protected by try-catch block and may throw std::bad_alloc")
         << FuncName;
+  } else if (const auto *HeapCall = Result.Nodes.getNodeAs<CallExpr>("unsafe_bihlheap_throwing_method")) {
+    std::string QualifiedMethodName = "BihlHeap method";
+    if (const auto *Method = dyn_cast_or_null<CXXMethodDecl>(HeapCall->getDirectCallee())) {
+      const auto *Parent = Method->getParent();
+      if (Parent) {
+        QualifiedMethodName = Parent->getQualifiedNameAsString() + "::" +
+                              Method->getNameAsString();
+      } else {
+        QualifiedMethodName = Method->getQualifiedNameAsString();
+      }
+    }
+    diag(HeapCall->getBeginLoc(),
+         "Bihl heap method '%0' is not protected by try-catch block and may throw std::bad_alloc")
+        << QualifiedMethodName;
   }
 }
 
