@@ -511,4 +511,39 @@ Detailed implementation will follow once validation of the unmodified build is c
 Stick to upstream `llvm-project` structure to simplify rebasing. Keep custom checks isolated under your own module directory.
 
 ---
+## 11. Upgrade Process For New LLVM/clang-tidy Releases
+When a new upstream release (for example `llvmorg-22.1.1`) is available, use this process:
+
+1. Ensure the current branch is clean.
+2. Commit all local Bihler changes first.
+3. Fetch latest upstream tags.
+4. Create a new Bihler release branch from the new upstream tag.
+5. Cherry-pick the Bihler patch series onto the new branch.
+6. Resolve conflicts (typically in `clang-tidy/CMakeLists.txt` and `ClangTidyForceLinker.h`).
+7. Build and validate `clang-tidy`.
+8. Run a small smoke test and then the full project analysis.
+
+Recommended commands:
+```bash
+git status
+git fetch upstream --tags
+
+# Create new branch from upstream tag
+git checkout -b release/llvmorg-22.1.1-bihler llvmorg-22.1.1
+
+# Replay Bihler patches (example range)
+git cherry-pick 5f3460814b8e^..bihler-patches
+
+# Build + validate
+cmake --build llvm-build --target clang-tidy --config Release
+llvm-build/bin/clang-tidy.exe --list-checks --checks="*" | findstr bihler
+```
+
+Validation checklist after upgrade:
+- `clang-tidy --version` shows expected new version.
+- `bihler-unsafe-allocation` appears in `--list-checks`.
+- Local sample test for BihlHeap warnings passes.
+- Full project report can be generated.
+
+---
 If you need the custom check scaffolding next, let me know after validation.
