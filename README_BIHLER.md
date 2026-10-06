@@ -85,6 +85,17 @@ cd C:\TFS\Spielwiese\ClangTidyBihler\llvm-build
 cmake --build . --target clang-tidy --config Release
 ```
 
+### Wichtiger Vorab-Check fuer die Build-Umgebung
+
+Fuehren Sie vor jedem Build kurz diese Checks aus:
+
+```powershell
+where.exe cl
+where.exe cmake
+```
+
+Wenn `cl.exe` oder `cmake.exe` nicht gefunden werden, zuerst `VsDevCmd.bat` aufrufen oder direkt das Build-Skript ausfuehren.
+
 ### Automatisiertes Build-Skript
 
 Erstellen Sie `build_clang_tidy.bat`:
@@ -117,6 +128,8 @@ if %ERRORLEVEL% EQU 0 (
 **Build-Dauer:** Erstes vollständiges Build: 1-3 Stunden (3010 Dateien)
 
 **Hinweis:** Die fertige Binary liegt bei Verwendung des Visual Studio Generators unter `Release\bin\clang-tidy.exe`
+
+**Empfehlung fuer Releases:** Fuer Upgrades immer das Skript `build_bihler_module.bat` verwenden, weil dort die Visual-Studio-Umgebung gesetzt wird.
 
 ---
 
@@ -285,7 +298,7 @@ ninja clang-tidy
 ### Check verfügbar prüfen
 
 ```powershell
-.\bin\clang-tidy.exe --list-checks --checks=* | findstr bihler
+.\bin\clang-tidy.exe --list-checks --checks="*" | findstr /i bihler
 ```
 
 **Erwartete Ausgabe:**
@@ -349,6 +362,25 @@ set PATH=C:\Program Files\CMake\bin;%PATH%
 # Visual Studio Developer Command Prompt starten oder:
 "C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat"
 ```
+
+### Problem: Standard-Header fehlen (`cassert`, `type_traits`, `system_error`, `cinttypes`)
+
+**Symptom:** Build bricht frueh mit `fatal error C1083` auf Standard-C/C++-Header ab.
+
+**Ursache:** Build lief ohne korrekt initialisierte VS-Developer-Umgebung.
+
+**Lösung:**
+1. Build aus einer VS Developer Command Prompt starten **oder** `build_bihler_module.bat` verwenden.
+2. Nicht mit einer "normalen" Shell bauen, wenn `cl.exe`/Includes nicht gesetzt sind.
+
+### Problem: `clang-tidy --list-checks` zeigt "No checks enabled"
+
+**Lösung:**
+```powershell
+.\bin\clang-tidy.exe --list-checks --checks="*" | findstr /i bihler
+```
+
+Ohne `--checks="*"` werden ggf. keine Checks gelistet, obwohl das Modul korrekt gebaut wurde.
 
 ### Problem: Build-Fehler nach neuen Dateien
 
@@ -535,7 +567,7 @@ git checkout -b release/llvmorg-22.1.1-bihler llvmorg-22.1.1
 git cherry-pick 5f3460814b8e^..bihler-patches
 
 # Build + validate
-cmake --build llvm-build --target clang-tidy --config Release
+llvm-project\build_bihler_module.bat
 llvm-build/bin/clang-tidy.exe --list-checks --checks="*" | findstr bihler
 ```
 
